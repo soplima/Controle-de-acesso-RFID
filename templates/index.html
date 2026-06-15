@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RFID Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; }
+        #status-box { padding: 50px; border-radius: 10px; display: inline-block; background: #eee; }
+        h1 { margin: 0; font-size: 3em; }
+    </style>
+    
+    <!-- 1. Import the Socket.IO JavaScript Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+
+    <div id="status-box">
+        <h2 id="subtitle">Waiting for scan...</h2>
+        <h1 id="user-name" style="color: #666;">--</h1>
+    </div>
+
+    <script>
+        // 2. Connect to the Python WebSocket server
+        var socket = io.connect('http://localhost:5000');
+
+        // 3. Listen for the 'new_scan' event
+        socket.on('new_scan', function(data) {
+            
+            // Grab the HTML elements we want to change
+            var nameElement = document.getElementById('user-name');
+            var subtitleElement = document.getElementById('subtitle');
+            
+            // Instantly update the text on the screen
+            nameElement.innerText = data.name;
+            
+            // Change colors based on the status sent from Python
+            if (data.status === 'approved') {
+                nameElement.style.color = 'green';
+                subtitleElement.innerText = "Welcome!";
+            } else {
+                nameElement.style.color = 'red';
+                subtitleElement.innerText = "Unknown Tag";
+            }
+            
+            // Optional: clear the screen back to "waiting" after 5 seconds
+            setTimeout(function() {
+                nameElement.innerText = "--";
+                nameElement.style.color = '#666';
+                subtitleElement.innerText = "Waiting for scan...";
+            }, 5000);
+        });
+    </script>
+
+</body>
+</html>
