@@ -21,7 +21,7 @@
 
     <script>
         // 2. Connect to the Python WebSocket server
-        var socket = io.connect('http://localhost:5000');
+        var socket = io.connect();
 
         // 3. Listen for the 'new_scan' event
         socket.on('new_scan', function(data) {
