@@ -1,153 +1,163 @@
 #include <SPI.h>
-#include <printf.h>
-#include <RF24.h>
+#include <rdm6300.h>
+#include "printf.h"
+#include "RF24.h"
 
 #define CE_PIN 7
-#define CNS_PIN 8
+#define CSN_PIN 8
+
+#define RDM6300_RX_PIN 2
+#define READ_LED_PIN 4
 
 #define MSG 0
 #define ACK 1
 #define RTS 2
 #define CTS 3
 
-RF24 radio(CE_PIN, CNS_PIN);
+#define TEMPO_LIMITE 2000 
+
+unsigned long tempo_espera = 0;
+unsigned long tempo_recebe = 0;
+
+RF24 radio(CE_PIN,CSN_PIN);
+Rdm6300 leitor;
 
 uint64_t address = 0x3030303030LL;
 
+uint8_t id = 50;         //mudar para o id das plaquinhas
+uint8_t id_gateway = 34;
+
 byte payload[8];
 byte payloadrx[8];
+//por que tem dois paylaods? simplesmente, o payload normal é o nosso payload para mandar, e o payloadrx é meio que o buffer para receber as coisas
 
-uint8_t Id = 34; //mudar para o id da praquinha
-uint8_t led_id = 0;
-
-uint32_t numero_tag;
+//------------------------------------------------------------------------------------------------
 
 void setup(){
   Serial.begin(115200);
-  
-  while(!Serial){};
-  
-  if (!radio.begin()){ 
-      Serial.println("Radio nao funciona"); 
-      while(1){}; 
+  while (!Serial) {}
+
+  if (!radio.begin()) {
+    Serial.println(F("radio hardware is not responding!!"));
+    while (1) {}
   }
-    
-  radio.setPALevel(RF24_PA_MAX); 
-  radio.setChannel(101);
-  radio.setPayloadSize(sizeof(payloadrx));
+  leitor.begin(RDM6300_RX_PIN);
+
+  radio.setPALevel(RF24_PA_MAX);  
+  radio.setChannel(27);
+  radio.setPayloadSize(sizeof(payload)); 
   radio.setAutoAck(false);
   radio.setCRCLength(RF24_CRC_DISABLED); 
-  radio.setDataRate(RF24_2MBPS);
+  radio.setDataRate(RF24_250KBPS);
 
   radio.openWritingPipe(address);
-  radio.openReadingPipe(1, address);
-  radio.startListening();
+  radio.openReadingPipe(1, address); 
   
-  printf_begin(); 
+  radio.startListening();
+
+  printf_begin();             
   radio.printPrettyDetails(); 
 }
 
-void printPayload(byte *dados, int tamanho){
-  Serial.print(F("Rcvd "));
-  Serial.print(tamanho); 
-  Serial.print(F(" ID: "));
-  Serial.print(dados[0]);  
-  Serial.print(F(" Destinatario: "));
-  Serial.print(dados[1]);  
-  Serial.print(F(" Tipo: "));
-  Serial.print(dados[2]);  
-  Serial.print(F(" Tag: "));
-  
-  Serial.print("{\"node\": ");
-  Serial.print(payloadrx[0]);
-  Serial.print(", \"tag\": ");
-  numero_tag =((uint32_t)payloadrx[3]<<24)|((uint32_t)payloadrx[4]<<16)|((uint32_t)payloadrx[5]<<8)|((uint32_t)payloadrx[6]);
-  Serial.print(numero_tag, HEX);
-  Serial.print("}");
+//------------------------------------------------------------------------------------------------
 
-
-  Serial.print(F(" : "));
-  for(int i=7; i<tamanho; i++){
-    Serial.print(dados[i]);
-  }
-  Serial.println();
-}
-
-bool mandaPayload(uint8_t destinatario, uint8_t tipo){
+void mandaPayload(uint8_t destinatario, uint8_t tipo){
   radio.stopListening();
 
-  payload[0] = Id;
+  payload[0] = id;
   payload[1] = destinatario;
   payload[2] = tipo;
-
+  payload[7] = 0;
+  
+  radio.write(&payload, 8); 
   radio.startListening();
-  delayMicroseconds(150);
-  if (radio.testCarrier()) {
-    radio.stopListening();
-    return false;
-  }
-  radio.stopListening();
-  return radio.write(&payload, 8);
 }
 
-bool aguardaMSG(uint8_t remetente, uint8_t tipo) {
+//------------------------------------------------------------------------------------------------
+
+bool recebePayload(uint8_t remetente, uint8_t tipo){
   radio.startListening();
   radio.flush_rx();
-  
-  unsigned long start = millis();
-  
-  while(millis() - start < 250) { 
+
+  tempo_recebe = millis();
+
+  while(millis() - tempo_recebe < TEMPO_LIMITE){ 
     if(radio.available()){
-      radio.read(&payloadrx, 8);
+      radio.read(&payloadrx, 8); // Lê para o Inbox
+      Serial.print("Recebi: ");
+      Serial.print(payloadrx[0]);
+      Serial.print(" ");
+      Serial.print(payloadrx[1]);
+      Serial.print(" ");
+      Serial.println(payloadrx[2]);
       
-      if(payloadrx[0] == remetente && payloadrx[1] == Id && payloadrx[2] == tipo) {
-        if(tipo == MSG){printPayload(payloadrx, 8);}
+      if((payloadrx[0] == remetente && payloadrx[1] == id && payloadrx[2] == tipo)){
         return true;
       }
     }
   }
-  return false; 
+  return false; // Retorna falso se o tempo esgotar
 }
 
-void trataRTS(uint8_t remetente) {
-  Serial.print("RTS de ");
-  Serial.println(remetente);
+// bool recebePayload(uint8_t remetente, uint8_t tipo){
+
+//   radio.startListening();
+
+//   unsigned long inicio = millis();
+
+//   while(millis() - inicio < 1000){
+
+//     if(radio.available()){
+
+//       radio.read(&payloadrx,8);
+
+//       Serial.print("PACOTE RECEBIDO -> ");
+//       Serial.print(payloadrx[0]);
+//       Serial.print(" ");
+//       Serial.print(payloadrx[1]);
+//       Serial.print(" ");
+//       Serial.println(payloadrx[2]);
+
+//       return true;
+//     }
+//   }
+
+//   Serial.println("Nenhum pacote chegou.");
+
+//   return false;
+// }
+
+//------------------------------------------------------------------------------------------------
+
+bool identificaPayload(){
+  radio.read(&payloadrx, 8); // Lê para o Inbox
   
-  delay(5); 
-  
-  bool ctsEnviado = mandaPayload(remetente, CTS);
-  
-  if (ctsEnviado) {
-    Serial.println("CTS enviado. Aguardando MSG...");
-    
-    if (aguardaMSG(remetente, MSG)) {
-      Serial.println("MSG Recebida, mandando ACK");
-      delay(5);
-      mandaPayload(remetente, ACK);
-      delay(1000);
-      handshake_led(led_id);
-    } else {
-      Serial.println("Timeout: MSG nao chegou.");
-    }
-  } else {
-    Serial.println("Falha ao enviar CTS: Meio ocupado.");
+  if(payloadrx[1] != id && payloadrx[2] == CTS){
+    Serial.println("Meio ocupado! Outro node esta transmitindo.");
+    tempo_espera = millis() + 200; 
+    return false;
   }
-  
-  radio.startListening(); 
+  return true;
 }
 
-void handshake_led(uint8_t led_id){
-  Serial.println("Mandando RTS");
-  mandaPayload(led_id, RTS);
+//------------------------------------------------------------------------------------------------
 
-  if(aguardaMSG(led_id, CTS)){
+void handshake(){
+  Serial.println("Mandando RTS");
+  mandaPayload(id_gateway, RTS);
+
+  if(recebePayload(id_gateway, CTS)){
     Serial.println("CTS recebido");
     Serial.println("Enviando MSG");
-    
-    mandaPayload(led_id, MSG);
+    delay(10);
+    mandaPayload(id_gateway, MSG);
 
-    if(aguardaMSG(led_id, ACK)){
+    if(recebePayload(id_gateway, ACK)){
       Serial.println("ACK recebido. Sucesso!");
+	    //payload[3]=0;
+	    //payload[4]=0;
+	    //payload[5]=0;
+	    //payload[6]=0;
     }
     else{
       Serial.println("Erro: Tempo de resposta excedido, sem ACK");
@@ -155,29 +165,51 @@ void handshake_led(uint8_t led_id){
   }
   else{
     Serial.println("Erro: CTS não concedido (timeout ou colisao)");
-  }  
+  }
+  
   radio.startListening();
 }
+//---------------------------------------------------------------------------------------------------
 
+bool lerRFID(){
+  if(leitor.get_new_tag_id()){
+    Serial.println(leitor.get_tag_id(), HEX);
+    int32_t tag_id = leitor.get_tag_id();
 
-void processaPayload(byte *dados) {
-  uint8_t remetente = dados[0];
-  uint8_t destinatario = dados[1];
-  uint8_t tipo = dados[2];
+    payload[3] = (tag_id >>24) & 0XFF;
+    payload[4] = (tag_id >>16) & 0XFF;
+    payload[5] = (tag_id >>8) & 0XFF;
+    payload[6] =  tag_id & 0XFF;
 
-  if (destinatario == Id) { 
-    switch(tipo) {
-      case RTS:
-        trataRTS(remetente);
-        break;
-    }
+    return true;
   }
+  return false;
 }
-void loop() {
-  if (radio.available()) {
-    radio.read(&payloadrx, 8); // Grava os dados da antena no Inbox (payloadrx)
-    
-    //printPayload(payloadrx, 8);
-    processaPayload(payloadrx);
+
+//------------------------------------------------------------------------------------------------
+
+void loop(){
+  if(radio.available()){
+    identificaPayload();
   }
+  
+  if(lerRFID()){
+    if(millis() < tempo_espera){
+        Serial.println("Aguarde: Durante tempo de espera (NAV ativo)");
+      }
+      else{
+        handshake();
+      }
+  }
+  /*if(Serial.available()){
+    char c = Serial.read();
+    if(toupper(c) == 'T'){
+      if(millis() < tempo_espera){
+        Serial.println("Aguarde: Durante tempo de espera (NAV ativo)");
+      }
+      else{
+        handshake();
+      }
+    }
+  }*/
 }
