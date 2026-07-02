@@ -44,7 +44,7 @@ void setup(){
   leitor.begin(RDM6300_RX_PIN);
 
   radio.setPALevel(RF24_PA_MAX);  
-  radio.setChannel(27);
+  radio.setChannel(37);
   radio.setPayloadSize(sizeof(payload)); 
   radio.setAutoAck(false);
   radio.setCRCLength(RF24_CRC_DISABLED); 

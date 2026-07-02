@@ -37,7 +37,7 @@ void setup(){
   }
     
   radio.setPALevel(RF24_PA_MAX); 
-  radio.setChannel(27);
+  radio.setChannel(37);
   radio.setPayloadSize(sizeof(payloadrx));
   radio.setAutoAck(false);
   radio.setCRCLength(RF24_CRC_DISABLED); 

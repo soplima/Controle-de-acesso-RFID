@@ -11,7 +11,7 @@
 #define CTS 3
 
 #define TEMPO_LIMITE 500
-#define LED_PIN 13
+
 
 unsigned long tempo_espera = 0;
 unsigned long tempo_recebe = 0;
@@ -33,16 +33,15 @@ void setup() {
   while (!Serial) {}
 
   if (!radio.begin()) {
-    Serial.println(F("radio hardware is not responding!!"));
+    //Serial.println(F("radio hardware is not responding!!"));
     while (1) {}
   }
 
   radio.setPALevel(RF24_PA_MAX);
-  radio.setChannel(27);
+  radio.setChannel(37);
   radio.setPayloadSize(sizeof(payload));
   radio.setAutoAck(false);
 
-  // Comunicação mais robusta
   radio.setCRCLength(RF24_CRC_DISABLED);
   radio.setDataRate(RF24_250KBPS);
 
@@ -54,8 +53,7 @@ void setup() {
   printf_begin();
   radio.printPrettyDetails();
 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);
+  pinMode(2, OUTPUT);
 }
 
 //------------------------------------------------------------------------------------------------
@@ -122,24 +120,18 @@ bool identificaPayload() {
 void trataRTS(uint32_t remetente) {
 
   Serial.println("RTS recebido");
-
   delay(10);
 
   if (mandaPayload(remetente, CTS)) {
-
     Serial.println("CTS enviado. Aguardando MSG...");
-
     if (recebePayload(remetente, MSG)) {
-
       Serial.println("MSG recebida.");
-
       mandaPayload(remetente, ACK);
-
       Serial.println("ACK enviado.");
-
-      digitalWrite(LED_PIN, HIGH);
-      delay(2000);
-      digitalWrite(LED_PIN, LOW);
+      digitalWrite(2, HIGH);
+      delay(500);
+      digitalWrite(2, LOW);
+      
     }
     else {
       Serial.println("Timeout aguardando MSG.");
